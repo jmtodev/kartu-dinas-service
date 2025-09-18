@@ -1,6 +1,8 @@
 from config.config import CONFIG
 from config.logger import setup_logger
 from services.penerbitan import Penerbitan
+from services.whitelist import Whitelist
+from services.blacklist import Blacklist
 
 class Service:
     def __init__(self):
@@ -11,8 +13,12 @@ class Service:
 
         if service_name.lower() == 'penerbitan':
             self.service = Penerbitan()
+        elif service_name.lower() == 'whitelist':
+            self.service = Whitelist()
+        elif service_name.lower() == 'blacklist':
+            self.service = Blacklist()
         else:
-            self.logger.error("Service tidak terdaftar, tersedia 'penerbitan'.")
+            self.logger.error("Service tidak terdaftar, tersedia 'penerbitan','whitelist','blacklist'.")
 
     def start(self):
         if self.service:

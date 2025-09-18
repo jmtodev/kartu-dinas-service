@@ -1,10 +1,10 @@
-import psycopg2
-import psycopg2.extras
+import mysql.connector
+from mysql.connector import Error
 from database.base import BaseDatabaseConnector
 from config.logger import setup_logger
 
 
-class PGSQLConnector(BaseDatabaseConnector):
+class MySQLConnector(BaseDatabaseConnector):
     def __init__(self, config):
         self.config = config
         self.conn = None
@@ -19,22 +19,23 @@ class PGSQLConnector(BaseDatabaseConnector):
 
     def connect(self):
         self.logger.info(
-            f"Menghubungkan ke database PostgreSQL: {self.config['host']}:{self.config['port']}"
+            f"Menghubungkan ke database MySQL: {self.config['host']}:{self.config['port']}"
         )
         try:
-            self.conn = psycopg2.connect(
+            self.conn = mysql.connector.connect(
                 host=self.config["host"],
                 user=self.config["user"],
                 port=self.config["port"],
                 password=self.config["password"],
-                dbname=self.config["database"],
-                cursor_factory=psycopg2.extras.RealDictCursor,  # hasil query dict
+                database=self.config["database"],
+                autocommit=False,  # penting untuk transaksi manual
             )
-            self.cursor = self.conn.cursor()
-            self.logger.info("Koneksi PostgreSQL berhasil!")
+            # dictionary=True -> hasil query berupa dict, mirip RealDictCursor psycopg2
+            self.cursor = self.conn.cursor(dictionary=True)
+            self.logger.info("Koneksi MySQL berhasil!")
             return self.conn
-        except psycopg2.Error as err:
-            self.logger.error(f"Gagal terhubung ke database PostgreSQL: {err}")
+        except Error as err:
+            self.logger.error(f"Gagal terhubung ke database MySQL: {err}")
             raise
 
     def fetch(self, query: str, params: tuple = ()):
@@ -43,7 +44,7 @@ class PGSQLConnector(BaseDatabaseConnector):
             self.cursor.execute(query, params)
             result = self.cursor.fetchall()
             return result
-        except psycopg2.Error as err:
+        except Error as err:
             self.logger.error(f"Error saat menjalankan query: {err}")
             raise
 
@@ -52,8 +53,16 @@ class PGSQLConnector(BaseDatabaseConnector):
         try:
             self.cursor.execute(query, params)
             self.logger.info("Query berhasil dieksekusi.")
-        except psycopg2.Error as err:
+        except Error as err:
             self.logger.error(f"Error saat menjalankan query: {err}")
+            raise
+
+    def executemany(self, query: str, params: list):
+        try:
+            self.cursor.executemany(query, params)
+            self.logger.info(f"{len(params)} query berhasil dieksekusi sekaligus.")
+        except Error as err:
+            self.logger.error(f"Error saat menjalankan batch query: {err}")
             raise
 
     def commit(self):
@@ -61,8 +70,16 @@ class PGSQLConnector(BaseDatabaseConnector):
         try:
             self.conn.commit()
             self.logger.info("Perubahan berhasil disimpan.")
-        except psycopg2.Error as err:
+        except Error as err:
             self.logger.error(f"Gagal menyimpan perubahan: {err}")
+            raise
+
+    def rollback(self):
+        self.logger.warning("Rollback transaksi...")
+        try:
+            self.conn.rollback()
+        except Error as err:
+            self.logger.error(f"Gagal rollback: {err}")
             raise
 
     def close(self):

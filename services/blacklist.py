@@ -4,13 +4,13 @@ from database.mysql.connector import MySQLConnector
 from config.config import CONFIG
 
 
-class Penerbitan:
+class Blacklist:
     def __init__(self):
         self.db = MySQLConnector(CONFIG['mysql'])
         self.logger = setup_logger(self.__class__.__name__)
 
     def run_service(self):
-        self.logger.info("Service penerbitan running...")
+        self.logger.info("Service blacklist running...")
         try:
             self.db.connect()
             rows = self._fetch_from_api()
@@ -44,7 +44,7 @@ class Penerbitan:
             }
 
             return Http.http_get(
-                f"{CONFIG['endpoint_url']}/api/v1/distribution/data/penerbitan",
+                f"{CONFIG['endpoint_url']}/api/v1/distribution/data/blacklist",
                 headers=headers,
             )
         except Exception as e:
@@ -52,46 +52,16 @@ class Penerbitan:
             return None
         
     def _map_data(self, item):
-        # Ambil field sederhana langsung
         data = {
-            "no_kartu": item.get("no_kartu"),
-            "nama_pengguna": item.get("nama_pengguna"),
-            "no_registrasi": item.get("no_registrasi"),
-            "status_pengajuan": item.get("status_pengajuan"),
-            "status_kartu": item.get("status_kartu"),
-            "npp": item.get("npp"),
             "uid": item.get("uid"),
-            "tgl_terbit": item.get("tgl_terbit"),
+            "alasan": item.get("alasan"),
+            "no_kartu": item.get("no_kartu"),
+            "penerbitan_id": item.get("penerbitan_id"),
             "tgl_kadaluwarsa": item.get("tgl_kadaluwarsa"),
+            "no_blacklist": item.get("no_blacklist"),
         }
 
-        # Flatten penerbit
-        penerbit = item.get("penerbit") or {}
-        data["penerbit_nama"] = penerbit.get("nama")
-
-        # Flatten jenis kartu
-        jenis_kartu = item.get("jenis_kartu") or {}
-        data["jenis_kartu_nama"] = jenis_kartu.get("nama")
-        data["jenis_kartu_kode"] = jenis_kartu.get("kode")
-
-        # Flatten unit kerja
-        unit_kerja = item.get("unit_kerja") or {}
-        data["unit_kerja_nama"] = unit_kerja.get("nama")
-        data["unit_kerja_kode"] = unit_kerja.get("kode")
-
-        # Flatten regional list → simpan sebagai string dipisahkan koma
-        regional_list = item.get("regional") or []
-        data["regional_ids"] = ",".join([r.get("id") for r in regional_list if r.get("id")])
-        data["regional_namas"] = ",".join([r.get("nama") for r in regional_list if r.get("nama")])
-
-        # Flatten ruas list → simpan sebagai string dipisahkan koma
-        ruas_list = item.get("ruas") or []
-        data["ruas_ids"] = ",".join([r.get("id") for r in ruas_list if r.get("id")])
-        data["ruas_namas"] = ",".join([r.get("nama") for r in ruas_list if r.get("nama")])
-
         return data
-
-
 
     def _save_to_db(self, mapped_data):
         if not mapped_data:
@@ -102,7 +72,7 @@ class Penerbitan:
         placeholders = ", ".join([f"%({c})s" for c in columns])
 
         query = f"""
-            INSERT INTO tbl_penerbitan_kartu ({col_names})
+            INSERT INTO tbl_blacklist_kartu ({col_names})
             VALUES ({placeholders})
         """
 
