@@ -25,8 +25,17 @@ class Blacklist:
 
             mapped_data = [self._map_data(item) for item in data]
 
+            ids = [str(item.get("id")) for item in data if item.get("id")]
+            ids_str = ",".join(ids)
+
             # save ke db
-            self._save_to_db(mapped_data)
+            if self._save_to_db(mapped_data):
+                # ambil semua id dari data asli (root id)
+                ids = [str(item.get("id")) for item in data if item.get("id")]
+                ids_str = ",".join(ids)
+
+                # kalau berhasil simpan baru flag
+                self._flag_data(ids_str)
 
         except Exception as e:
             self.logger.error(f"Terjadi error saat menjalankan service: {e}")
@@ -65,7 +74,7 @@ class Blacklist:
 
     def _save_to_db(self, mapped_data):
         if not mapped_data:
-            return
+            return False
 
         columns = list(mapped_data[0].keys())
         col_names = ", ".join(columns)
@@ -82,10 +91,34 @@ class Blacklist:
             
             # commit supaya data benar-benar tersimpan
             self.db.conn.commit()
-
             self.logger.info(f"{len(mapped_data)} data berhasil disimpan ke DB.")
+            
+            return True
 
         except Exception as e:
             self.db.conn.rollback()
             self.logger.error(f"Gagal simpan ke DB, simpan dibatalkan: {e}")
-            raise
+
+            return False
+
+    def _flag_data(self, ids: str):
+        try:
+            headers = {
+                "x-api-key": CONFIG["xapikey"],
+            }
+
+            payload = {"blacklist_ids": ids}
+
+            self.logger.info("Memulai flagging data...")
+
+            response = Http.http_patch(
+                f"{CONFIG['endpoint_url']}/api/v1/distribution/data/blacklist",
+                payload=payload,
+                headers=headers,
+            )
+
+            return response
+
+        except Exception as e:
+            self.logger.error(f"Error saat request flag data: {e}")
+            return None

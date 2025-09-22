@@ -25,8 +25,17 @@ class Whitelist:
 
             mapped_data = [self._map_data(item) for item in data]
 
+            ids = [str(item.get("id")) for item in data if item.get("id")]
+            ids_str = ",".join(ids)
+
             # save ke db
-            self._save_to_db(mapped_data)
+            if self._save_to_db(mapped_data):
+                # ambil semua id dari data asli (root id)
+                ids = [str(item.get("id")) for item in data if item.get("id")]
+                ids_str = ",".join(ids)
+
+                # kalau berhasil simpan baru flag
+                self._flag_data(ids_str)
 
         except Exception as e:
             self.logger.error(f"Terjadi error saat menjalankan service: {e}")
@@ -54,31 +63,18 @@ class Whitelist:
     def _map_data(self, item):
         # Ambil field sederhana langsung
         data = {
-            "identitas": item.get("identitas"),
+            "ktp_id": item.get("uid"),
             "no_registrasi": item.get("no_registrasi"),
-            "status_pengajuan": item.get("status_pengajuan"),
-            "status_kartu": item.get("status_kartu"),
-            "uid": item.get("uid"),
-            "tgl_terbit": item.get("tgl_terbit"),
-            "penerbit": item.get("penerbit"),
-            "organisasi_instansi": item.get("organisasi_instansi"),
-            "unit_kerja": item.get("unit_kerja"),
+            "tgl_terbit": item.get('tgl_terbit'),
+            "tgl_kadaluarsa": item.get('tgl_kadaluwarsa'),
+            "nama": item.get('nama_pengguna'),
+            "ruas": item.get('ruas'),
+            "penempatan_gerbang": item.get('penempatan_gerbang'),
+            "status": item.get("status_kartu"),
+            "isdeleted": "0",
         }
-
-        # Flatten regional list → simpan sebagai string dipisahkan koma
-        regional_list = item.get("regional") or []
-        data["regional_ids"] = ",".join([r.get("id") for r in regional_list if r.get("id")])
-        data["regional_namas"] = ",".join([r.get("nama") for r in regional_list if r.get("nama")])
-
-        # Flatten ruas list → simpan sebagai string dipisahkan koma
-        ruas_list = item.get("ruas") or []
-        data["ruas_ids"] = ",".join([r.get("id") for r in ruas_list if r.get("id")])
-        data["ruas_namas"] = ",".join([r.get("nama") for r in ruas_list if r.get("nama")])
         
-        # Flatten gerbang list → simpan sebagai string dipisahkan koma
-        gerbang_list = item.get("gerbang") or []
-        data["gerbang_ids"] = ",".join([r.get("id") for r in gerbang_list if r.get("id")])
-        data["gerbang_namas"] = ",".join([r.get("nama") for r in gerbang_list if r.get("nama")])
+        print(data)
 
         return data
 
@@ -86,14 +82,14 @@ class Whitelist:
 
     def _save_to_db(self, mapped_data):
         if not mapped_data:
-            return
+            return False
 
         columns = list(mapped_data[0].keys())
         col_names = ", ".join(columns)
         placeholders = ", ".join([f"%({c})s" for c in columns])
 
         query = f"""
-            INSERT INTO tbl_penerbitan_kartu_eksternal ({col_names})
+            INSERT INTO tbl_penerbitan_kartu_whitelist ({col_names})
             VALUES ({placeholders})
         """
 
@@ -103,10 +99,33 @@ class Whitelist:
             
             # commit supaya data benar-benar tersimpan
             self.db.conn.commit()
-
             self.logger.info(f"{len(mapped_data)} data berhasil disimpan ke DB.")
 
+            return True
         except Exception as e:
             self.db.conn.rollback()
             self.logger.error(f"Gagal simpan ke DB, simpan dibatalkan: {e}")
-            raise
+
+            return False
+
+    def _flag_data(self, ids: str):
+        try:
+            headers = {
+                "x-api-key": CONFIG["xapikey"],
+            }
+
+            payload = {"whitelist_ids": ids}
+
+            self.logger.info("Memulai flagging data...")
+
+            response = Http.http_patch(
+                f"{CONFIG['endpoint_url']}/api/v1/distribution/data/whitelist",
+                payload=payload,
+                headers=headers,
+            )
+
+            return response
+
+        except Exception as e:
+            self.logger.error(f"Error saat request flag data: {e}")
+            return None

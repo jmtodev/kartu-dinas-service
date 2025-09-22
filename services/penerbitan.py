@@ -25,8 +25,17 @@ class Penerbitan:
 
             mapped_data = [self._map_data(item) for item in data]
 
+            ids = [str(item.get("id")) for item in data if item.get("id")]
+            ids_str = ",".join(ids)
+
             # save ke db
-            self._save_to_db(mapped_data)
+            if self._save_to_db(mapped_data):
+                # ambil semua id dari data asli (root id)
+                ids = [str(item.get("id")) for item in data if item.get("id")]
+                ids_str = ",".join(ids)
+
+                # kalau berhasil simpan baru flag
+                self._flag_data(ids_str)
 
         except Exception as e:
             self.logger.error(f"Terjadi error saat menjalankan service: {e}")
@@ -54,48 +63,24 @@ class Penerbitan:
     def _map_data(self, item):
         # Ambil field sederhana langsung
         data = {
-            "no_kartu": item.get("no_kartu"),
-            "nama_pengguna": item.get("nama_pengguna"),
+            "ktp_id": item.get("uid"),
             "no_registrasi": item.get("no_registrasi"),
-            "status_pengajuan": item.get("status_pengajuan"),
-            "status_kartu": item.get("status_kartu"),
-            "npp": item.get("npp"),
-            "uid": item.get("uid"),
-            "tgl_terbit": item.get("tgl_terbit"),
-            "tgl_kadaluwarsa": item.get("tgl_kadaluwarsa"),
+            "ktp_jenis_id": item.get("jenis_kartu")["id"],
+            "model_operasi": "0",
+            "tgl_terbit": item.get('tgl_terbit'),
+            "tgl_kadaluarsa": item.get('tgl_kadaluwarsa'),
+            "nama": item.get('nama_pengguna'),
+            "ruas": item.get('ruas'),
+            "penempatan_gerbang": item.get('penempatan_gerbang'),
+            "status": item.get("status_kartu"),
+            "isdeleted": "0",
         }
-
-        # Flatten penerbit
-        penerbit = item.get("penerbit") or {}
-        data["penerbit_nama"] = penerbit.get("nama")
-
-        # Flatten jenis kartu
-        jenis_kartu = item.get("jenis_kartu") or {}
-        data["jenis_kartu_nama"] = jenis_kartu.get("nama")
-        data["jenis_kartu_kode"] = jenis_kartu.get("kode")
-
-        # Flatten unit kerja
-        unit_kerja = item.get("unit_kerja") or {}
-        data["unit_kerja_nama"] = unit_kerja.get("nama")
-        data["unit_kerja_kode"] = unit_kerja.get("kode")
-
-        # Flatten regional list → simpan sebagai string dipisahkan koma
-        regional_list = item.get("regional") or []
-        data["regional_ids"] = ",".join([r.get("id") for r in regional_list if r.get("id")])
-        data["regional_namas"] = ",".join([r.get("nama") for r in regional_list if r.get("nama")])
-
-        # Flatten ruas list → simpan sebagai string dipisahkan koma
-        ruas_list = item.get("ruas") or []
-        data["ruas_ids"] = ",".join([r.get("id") for r in ruas_list if r.get("id")])
-        data["ruas_namas"] = ",".join([r.get("nama") for r in ruas_list if r.get("nama")])
 
         return data
 
-
-
-    def _save_to_db(self, mapped_data):
+    def _save_to_db(self, mapped_data):        
         if not mapped_data:
-            return
+            return False
 
         columns = list(mapped_data[0].keys())
         col_names = ", ".join(columns)
@@ -109,13 +94,36 @@ class Penerbitan:
         try:
             with self.db.conn.cursor() as cur:
                 cur.executemany(query, mapped_data)
-            
+
             # commit supaya data benar-benar tersimpan
             self.db.conn.commit()
-
             self.logger.info(f"{len(mapped_data)} data berhasil disimpan ke DB.")
 
+            return True
         except Exception as e:
             self.db.conn.rollback()
             self.logger.error(f"Gagal simpan ke DB, simpan dibatalkan: {e}")
-            raise
+
+            return False
+
+    def _flag_data(self, ids: str):
+        try:
+            headers = {
+                "x-api-key": CONFIG["xapikey"],
+            }
+
+            payload = {"penerbitan_ids": ids}
+
+            self.logger.info("Memulai flagging data...")
+
+            response = Http.http_patch(
+                f"{CONFIG['endpoint_url']}/api/v1/distribution/data/penerbitan",
+                payload=payload,
+                headers=headers,
+            )
+
+            return response
+
+        except Exception as e:
+            self.logger.error(f"Error saat request flag data: {e}")
+            return None
