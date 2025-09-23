@@ -2,6 +2,7 @@ from services.http import Http
 from config.logger import setup_logger
 from database.mysql.connector import MySQLConnector
 from config.config import CONFIG
+import json
 
 
 class Blacklist:
@@ -53,14 +54,16 @@ class Blacklist:
             return None
 
     def _map_data(self, item):
+        jk = self._safe_get_json(item.get("jenis_kartu"))
         return {
-            "uuid": item.get("uid"),
-            "no_registrasi": item.get("no_blacklist"),
+            "uid": item.get("uid"),  # pakai uid bukan uuid
+            "no_blacklist": item.get("no_blacklist"),
             "info": item.get("alasan"),
-            "jenis_ktp": item.get("jenis_kartu")["id"] if item.get("jenis_kartu") else None,
+            "jenis_ktp": jk.get("id"),
             "tick": None,
             "penempatan_gerbang": None,
         }
+        
 
     def _save_to_db(self, mapped_data):        
         if not mapped_data:
@@ -109,3 +112,15 @@ class Blacklist:
         except Exception as e:
             self.logger.error(f"Error saat request flag data: {e}")
             return None
+        
+    @staticmethod
+    def _safe_get_json(self, value):
+        if isinstance(value, dict):
+            return value
+        if isinstance(value, str):
+            try:
+                return json.loads(value)
+            except json.JSONDecodeError:
+                return {}
+        return {}
+
