@@ -6,7 +6,7 @@ from config.config import CONFIG
 
 class Blacklist:
     def __init__(self):
-        self.db = MySQLConnector(CONFIG['mysql'])
+        self.db = MySQLConnector(CONFIG["mysql"])
         self.logger = setup_logger(self.__class__.__name__)
 
     def run_service(self):
@@ -14,8 +14,11 @@ class Blacklist:
         try:
             self.db.connect()
             rows = self._fetch_from_api()
+            if not rows or "data" not in rows or "data" not in rows["data"]:
+                self.logger.info("Tidak ada data valid dari API.")
+                return
 
-            data = rows['data']['data']
+            data = rows["data"]["data"]
 
             if not data:
                 self.logger.info("Tidak ada data untuk diproses.")
@@ -25,16 +28,9 @@ class Blacklist:
 
             mapped_data = [self._map_data(item) for item in data]
 
-            ids = [str(item.get("id")) for item in data if item.get("id")]
-            ids_str = ",".join(ids)
-
-            # save ke db
             if self._save_to_db(mapped_data):
-                # ambil semua id dari data asli (root id)
                 ids = [str(item.get("id")) for item in data if item.get("id")]
                 ids_str = ",".join(ids)
-
-                # kalau berhasil simpan baru flag
                 self._flag_data(ids_str)
 
         except Exception as e:
@@ -45,13 +41,9 @@ class Blacklist:
             except Exception as e:
                 self.logger.warning(f"Gagal menutup koneksi: {e}")
 
-
     def _fetch_from_api(self):
         try:
-            headers = {
-                "x-api-key": CONFIG["xapikey"],
-            }
-
+            headers = {"x-api-key": CONFIG["xapikey"]}
             return Http.http_get(
                 f"{CONFIG['endpoint_url']}/api/v1/distribution/data/blacklist",
                 headers=headers,
@@ -59,9 +51,9 @@ class Blacklist:
         except Exception as e:
             self.logger.error(f"Error saat request: {e}")
             return None
-        
+
     def _map_data(self, item):
-        data = {
+        return {
             "uid": item.get("uid"),
             "alasan": item.get("alasan"),
             "no_kartu": item.get("no_kartu"),
@@ -70,9 +62,7 @@ class Blacklist:
             "no_blacklist": item.get("no_blacklist"),
         }
 
-        return data
-
-    def _save_to_db(self, mapped_data):
+    def _save_to_db(self, mapped_data):        
         if not mapped_data:
             return False
 
@@ -80,45 +70,42 @@ class Blacklist:
         col_names = ", ".join(columns)
         placeholders = ", ".join([f"%({c})s" for c in columns])
 
+        # Tentukan kolom unik / primary key yang TIDAK boleh diupdate
+        unique_keys = {"uid", "no_blacklist", "penerbitan_id"}  
+
+        # Bangun update clause hanya untuk kolom non-key
+        update_cols = [c for c in columns if c not in unique_keys]
+        update_clause = ", ".join([f"{c}=VALUES({c})" for c in update_cols])
+
         query = f"""
             INSERT INTO tbl_blacklist_kartu ({col_names})
             VALUES ({placeholders})
+            ON DUPLICATE KEY UPDATE {update_clause}
         """
 
         try:
-            with self.db.conn.cursor() as cur:
-                cur.executemany(query, mapped_data)
-            
-            # commit supaya data benar-benar tersimpan
-            self.db.conn.commit()
-            self.logger.info(f"{len(mapped_data)} data berhasil disimpan ke DB.")
-            
+            self.db.executemany(query, mapped_data)
+            self.db.commit()
+            self.logger.info(f"{len(mapped_data)} data berhasil disimpan/diupdate ke DB.")
             return True
-
         except Exception as e:
-            self.db.conn.rollback()
+            self.db.rollback()
             self.logger.error(f"Gagal simpan ke DB, simpan dibatalkan: {e}")
-
             return False
+
 
     def _flag_data(self, ids: str):
         try:
-            headers = {
-                "x-api-key": CONFIG["xapikey"],
-            }
-
+            headers = {"x-api-key": CONFIG["xapikey"]}
             payload = {"blacklist_ids": ids}
 
             self.logger.info("Memulai flagging data...")
 
-            response = Http.http_patch(
+            return Http.http_patch(
                 f"{CONFIG['endpoint_url']}/api/v1/distribution/data/blacklist",
                 payload=payload,
                 headers=headers,
             )
-
-            return response
-
         except Exception as e:
             self.logger.error(f"Error saat request flag data: {e}")
             return None
