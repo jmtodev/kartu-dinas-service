@@ -57,7 +57,7 @@ class Blacklist:
             "uuid": item.get("uid"),
             "no_registrasi": item.get("no_blacklist"),
             "info": item.get("alasan"),
-            "jenis_ktp": item.get("jenis_kartu", {}).get("id") if item.get("jenis_kartu") else None,
+            "jenis_ktp": item.get("jenis_kartu")["id"] if item.get("jenis_kartu") else None,
             "tick": None,
             "penempatan_gerbang": None,
         }
@@ -78,7 +78,7 @@ class Blacklist:
         update_clause = ", ".join([f"{c}=VALUES({c})" for c in update_cols])
 
         query = f"""
-            INSERT INTO tbl_blacklist_kartu ({col_names})
+            INSERT INTO tbl_blacklist ({col_names})
             VALUES ({placeholders})
             ON DUPLICATE KEY UPDATE {update_clause}
         """
