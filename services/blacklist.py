@@ -112,9 +112,9 @@ class Blacklist:
         except Exception as e:
             self.logger.error(f"Error saat request flag data: {e}")
             return None
-        
+
     @staticmethod
-    def _safe_get_json(self, value):
+    def _safe_get_json(value):
         if isinstance(value, dict):
             return value
         if isinstance(value, str):
@@ -123,4 +123,3 @@ class Blacklist:
             except json.JSONDecodeError:
                 return {}
         return {}
-
