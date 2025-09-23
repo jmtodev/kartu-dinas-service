@@ -1,4 +1,3 @@
-# Ancol Client API Transaksi Manless
 mysql-connector-python
 APScheduler
 python-dotenv

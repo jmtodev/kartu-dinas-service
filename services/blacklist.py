@@ -54,12 +54,12 @@ class Blacklist:
 
     def _map_data(self, item):
         return {
-            "uid": item.get("uid"),
-            "alasan": item.get("alasan"),
-            "no_kartu": item.get("no_kartu"),
-            "penerbitan_id": item.get("penerbitan_id"),
-            "tgl_kadaluwarsa": item.get("tgl_kadaluwarsa"),
-            "no_blacklist": item.get("no_blacklist"),
+            "uuid": item.get("uid"),
+            "no_registrasi": item.get("no_blacklist"),
+            "info": item.get("alasan"),
+            "jenis_ktp": item.get("jenis_kartu", {}).get("id") if item.get("jenis_kartu") else None,
+            "tick": None,
+            "penempatan_gerbang": None,
         }
 
     def _save_to_db(self, mapped_data):        
