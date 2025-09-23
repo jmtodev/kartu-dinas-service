@@ -54,12 +54,11 @@ class Blacklist:
             return None
 
     def _map_data(self, item):
-        jk = self._safe_get_json(item.get("jenis_kartu"))
         return {
-            "uid": item.get("uid"),  # pakai uid bukan uuid
-            "no_blacklist": item.get("no_blacklist"),
+            "uuid": item.get("uid"),
+            "no_registrasi": item.get("no_blacklist"),
             "info": item.get("alasan"),
-            "jenis_ktp": jk.get("id"),
+            "jenis_ktp": item.get("jenis_kartu_id"),
             "tick": None,
             "penempatan_gerbang": None,
         }
@@ -112,14 +111,3 @@ class Blacklist:
         except Exception as e:
             self.logger.error(f"Error saat request flag data: {e}")
             return None
-
-    @staticmethod
-    def _safe_get_json(value):
-        if isinstance(value, dict):
-            return value
-        if isinstance(value, str):
-            try:
-                return json.loads(value)
-            except json.JSONDecodeError:
-                return {}
-        return {}
