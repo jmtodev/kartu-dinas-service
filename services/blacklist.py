@@ -2,7 +2,6 @@ from services.http import Http
 from config.logger import setup_logger
 from database.mysql.connector import MySQLConnector
 from config.config import CONFIG
-import json
 
 
 class Blacklist:
