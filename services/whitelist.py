@@ -57,6 +57,7 @@ class Whitelist:
             "ktp_id": item.get("uid"),
             "no_registrasi": item.get("no_registrasi"),
             "tgl_terbit": item.get("tgl_terbit"),
+            "signature_key": item.get("signature_key"),
             "tgl_kadaluarsa": item.get("tgl_kadaluarsa"),
             "nama": item.get("nama_pengguna"),
             "ruas": item.get("ruas"),
