@@ -1,3 +1,4 @@
+import os
 from services.http import Http
 from config.logger import setup_logger
 from database.mysql.connector import MySQLConnector
@@ -13,7 +14,11 @@ class Whitelist:
         self.logger.info("Service whitelist running...")
         try:
             self.db.connect()
-            rows = self._fetch_from_api()
+            
+            ruas_id = os.getenv("IDRUAS");
+            gerbang_id = os.getenv("IDGERBANG")
+            
+            rows = self._fetch_from_api(ruas_id, gerbang_id)
             if not rows or "data" not in rows or "data" not in rows["data"]:
                 self.logger.info("Tidak ada data valid dari API.")
                 return
@@ -41,16 +46,30 @@ class Whitelist:
             except Exception as e:
                 self.logger.warning(f"Gagal menutup koneksi: {e}")
 
-    def _fetch_from_api(self):
+    def _fetch_from_api(self, ruas_id=None, gerbang_id=None):
         try:
             headers = {"x-api-key": CONFIG["xapikey"]}
-            return Http.http_get(
-                f"{CONFIG['endpoint_url']}/api/v1/distribution/data/whitelist",
-                headers=headers,
-            )
+
+            # Bangun URL dengan parameter opsional
+            base_url = f"{CONFIG['endpoint_url']}/api/v1/distribution/data/whitelist"
+            params = []
+
+            if ruas_id is not None:
+                params.append(f"ruas_id={ruas_id}")
+            if gerbang_id is not None:
+                params.append(f"gerbang_id={gerbang_id}")
+
+            if params:
+                url = f"{base_url}?{'&'.join(params)}"
+            else:
+                url = base_url
+
+            return Http.http_get(url, headers=headers)
+
         except Exception as e:
             self.logger.error(f"Error saat request: {e}")
             return None
+
 
     def _map_data(self, item):
         return {
