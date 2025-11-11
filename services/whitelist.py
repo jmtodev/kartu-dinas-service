@@ -58,7 +58,7 @@ class Whitelist:
             "no_registrasi": item.get("no_registrasi"),
             "tgl_terbit": item.get("tgl_terbit"),
             "signature_key": item.get("signature_key"),
-            "tgl_kadaluarsa": item.get("tgl_kadaluarsa"),
+            "tgl_kadaluarsa": item.get("tgl_kadaluwarsa"),
             "nama": item.get("nama_pengguna"),
             "ruas": item.get("ruas"),
             "penempatan_gerbang": item.get("penempatan_gerbang"),
