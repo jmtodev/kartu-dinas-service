@@ -54,11 +54,13 @@ class Blacklist:
 
     def _map_data(self, item):
         return {
-            "uuid": item.get("uid"),
+            "uuid_origin": item.get("uid"),
+            "uuid": self._hex_to_decimal_little_endian(item.get("uid")),
             "no_registrasi": item.get("no_blacklist"),
             "info": item.get("alasan"),
             "jenis_ktp": item.get("jenis_kartu_id"),
             "tick": None,
+            "datetimeint": item.get("datetimeint"),
             "penempatan_gerbang": None,
         }
         
@@ -93,7 +95,12 @@ class Blacklist:
             self.db.rollback()
             self.logger.error(f"Gagal simpan ke DB, simpan dibatalkan: {e}")
             return False
-
+        
+    def _hex_to_decimal_little_endian(hex_str: str) -> int:
+        # Split into bytes (2 chars), reverse for little-endian → big-endian
+        bytes_reversed = "".join([hex_str[i:i+2] for i in range(0, len(hex_str), 2)][::-1])
+        # Convert to decimal
+        return int(bytes_reversed, 16)
 
     def _flag_data(self, ids: str):
         try:

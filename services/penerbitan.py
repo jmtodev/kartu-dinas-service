@@ -65,6 +65,7 @@ class Penerbitan:
             "penempatan_gerbang": item.get("penempatan_gerbang"),
             "status": item.get("status_kartu"),
             "isdeleted": "0",
+            "datetimeint": item.get("datetimeint"),
         }
 
     def _save_to_db(self, mapped_data):        
