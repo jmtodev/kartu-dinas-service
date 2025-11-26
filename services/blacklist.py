@@ -8,6 +8,13 @@ class Blacklist:
     def __init__(self):
         self.db = MySQLConnector(CONFIG["mysql"])
         self.logger = setup_logger(self.__class__.__name__)
+        
+    @staticmethod
+    def _hex_to_decimal_little_endian(hex_str: str) -> int:
+        bytes_reversed = "".join(
+            [hex_str[i:i+2] for i in range(0, len(hex_str), 2)][::-1]
+        )
+        return int(bytes_reversed, 16)
 
     def run_service(self):
         self.logger.info("Service blacklist running...")
@@ -55,12 +62,11 @@ class Blacklist:
     def _map_data(self, item):
         return {
             "uuid_origin": item.get("uid"),
-            "uuid": self._hex_to_decimal_little_endian(item.get("uid")),
+            "uuid": Blacklist._hex_to_decimal_little_endian(item.get("uid")),
             "no_registrasi": item.get("no_blacklist"),
             "info": item.get("alasan"),
             "jenis_ktp": item.get("jenis_kartu_id"),
-            "tick": None,
-            "datetimeint": item.get("datetimeint"),
+            "tick": item.get("datetimeint"),
             "penempatan_gerbang": None,
         }
         
@@ -74,16 +80,21 @@ class Blacklist:
         placeholders = ", ".join([f"%({c})s" for c in columns])
 
         # Tentukan kolom unik / primary key yang TIDAK boleh diupdate
-        unique_keys = {"uid", "no_blacklist", "penerbitan_id"}  
+        # unique_keys = {"uid", "no_blacklist", "penerbitan_id"}  
 
         # Bangun update clause hanya untuk kolom non-key
-        update_cols = [c for c in columns if c not in unique_keys]
-        update_clause = ", ".join([f"{c}=VALUES({c})" for c in update_cols])
+        # update_cols = [c for c in columns if c not in unique_keys]
+        # update_clause = ", ".join([f"{c}=VALUES({c})" for c in update_cols])
 
+        # query = f"""
+        #     INSERT INTO tbl_blacklist ({col_names})
+        #     VALUES ({placeholders})
+        #     ON DUPLICATE KEY UPDATE {update_clause}
+        # """
+        
         query = f"""
             INSERT INTO tbl_blacklist ({col_names})
             VALUES ({placeholders})
-            ON DUPLICATE KEY UPDATE {update_clause}
         """
 
         try:
@@ -95,12 +106,6 @@ class Blacklist:
             self.db.rollback()
             self.logger.error(f"Gagal simpan ke DB, simpan dibatalkan: {e}")
             return False
-        
-    def _hex_to_decimal_little_endian(hex_str: str) -> int:
-        # Split into bytes (2 chars), reverse for little-endian → big-endian
-        bytes_reversed = "".join([hex_str[i:i+2] for i in range(0, len(hex_str), 2)][::-1])
-        # Convert to decimal
-        return int(bytes_reversed, 16)
 
     def _flag_data(self, ids: str):
         try:

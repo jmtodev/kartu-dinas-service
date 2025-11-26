@@ -77,16 +77,21 @@ class Penerbitan:
         placeholders = ", ".join([f"%({c})s" for c in columns])
 
         # Tentukan kolom yang TIDAK boleh diupdate (primary key / unique key)
-        unique_keys = {"ktp_id", "no_registrasi", "ktp_jenis_id"}
+        # unique_keys = {"ktp_id", "no_registrasi", "ktp_jenis_id"}
 
         # Bangun update clause hanya untuk kolom non-key
-        update_cols = [c for c in columns if c not in unique_keys]
-        update_clause = ", ".join([f"{c}=VALUES({c})" for c in update_cols])
+        # update_cols = [c for c in columns if c not in unique_keys]
+        # update_clause = ", ".join([f"{c}=VALUES({c})" for c in update_cols])
 
+        # query = f"""
+        #     INSERT INTO tbl_penerbitan_kartu ({col_names})
+        #     VALUES ({placeholders})
+        #     ON DUPLICATE KEY UPDATE {update_clause}
+        # """
+        
         query = f"""
             INSERT INTO tbl_penerbitan_kartu ({col_names})
             VALUES ({placeholders})
-            ON DUPLICATE KEY UPDATE {update_clause}
         """
 
         try:

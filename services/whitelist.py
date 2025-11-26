@@ -81,7 +81,7 @@ class Whitelist:
             "nama": item.get("nama_pengguna"),
             "ruas": item.get("ruas"),
             "penempatan_gerbang": item.get("penempatan_gerbang"),
-            "status": item.get("status_kartu"),
+            "status": "1" if item.get("status_kartu") == "1" else "0",
             "isdeleted": "0",
             "datetimeint": item.get("datetimeint"),
         }
@@ -95,15 +95,20 @@ class Whitelist:
         placeholders = ", ".join([f"%({c})s" for c in columns])
 
         # Kolom unik / primary key jangan ikut di-update
-        unique_keys = {"ktp_id", "no_registrasi"}
+        # unique_keys = {"ktp_id", "no_registrasi"}
 
-        update_cols = [c for c in columns if c not in unique_keys]
-        update_clause = ", ".join([f"{c}=VALUES({c})" for c in update_cols])
+        # update_cols = [c for c in columns if c not in unique_keys]
+        # update_clause = ", ".join([f"{c}=VALUES({c})" for c in update_cols])
 
+        # query = f"""
+        #     INSERT INTO tbl_penerbitan_kartu_whitelist ({col_names})
+        #     VALUES ({placeholders})
+        #     ON DUPLICATE KEY UPDATE {update_clause}
+        # """
+        
         query = f"""
             INSERT INTO tbl_penerbitan_kartu_whitelist ({col_names})
             VALUES ({placeholders})
-            ON DUPLICATE KEY UPDATE {update_clause}
         """
 
         try:
