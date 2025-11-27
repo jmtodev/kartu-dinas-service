@@ -19,7 +19,7 @@ class MySQLConnector(BaseDatabaseConnector):
 
     def connect(self):
         self.logger.info(
-            f"Menghubungkan ke database MySQL: {self.config['host']}:{self.config['port']}"
+            f"Menghubungkan ke database MySQL: {self.config['host']}:{self.config['port']} | DB:{self.config['database']}"
         )
         try:
             self.conn = mysql.connector.connect(

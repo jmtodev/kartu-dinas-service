@@ -9,18 +9,23 @@ class Whitelist:
     def __init__(self):
         self.db = MySQLConnector(CONFIG["mysql"])
         self.logger = setup_logger(self.__class__.__name__)
+        
+        # Kolom yang menjadi UNIQUE KEY di DB
+        self.unique_keys = ["ktp_id", "ruas", "penempatan_gerbang"]
 
     def run_service(self):
         self.logger.info("Service whitelist running...")
+
         try:
             self.db.connect()
-            
-            ruas_id = os.getenv("IDRUAS");
+
+            ruas_id = os.getenv("IDRUAS")
             gerbang_id = os.getenv("IDGERBANG")
-            
+
             rows = self._fetch_from_api(ruas_id, gerbang_id)
+
             if not rows or "data" not in rows or "data" not in rows["data"]:
-                self.logger.info("Tidak ada data valid dari API.")
+                self.logger.warning("Tidak ada data valid dari API.")
                 return
 
             data = rows["data"]["data"]
@@ -29,17 +34,24 @@ class Whitelist:
                 self.logger.info("Tidak ada data untuk diproses.")
                 return
 
-            self.logger.info(f"Ditemukan {len(data)} data.")
+            self.logger.info(f"Ditemukan {len(data)} data dari API.")
 
             mapped_data = [self._map_data(item) for item in data]
 
+            # Debug UNIQUE KEY
+            for d in mapped_data:
+                self.logger.debug(
+                    f"UNIQUE CHECK → ktp_id={d['ktp_id']} | ruas={d['ruas']} | penempatan={d['penempatan_gerbang']}"
+                )
+
             if self._save_to_db(mapped_data):
                 ids = [str(item.get("id")) for item in data if item.get("id")]
-                ids_str = ",".join(ids)
-                self._flag_data(ids_str)
+                if ids:
+                    self._flag_data(",".join(ids))
 
         except Exception as e:
             self.logger.error(f"Terjadi error saat menjalankan service: {e}")
+
         finally:
             try:
                 self.db.close()
@@ -50,70 +62,57 @@ class Whitelist:
         try:
             headers = {"x-api-key": CONFIG["xapikey"]}
 
-            # Bangun URL dengan parameter opsional
             base_url = f"{CONFIG['endpoint_url']}/api/v1/distribution/data/whitelist"
             params = []
 
-            if ruas_id is not None:
+            if ruas_id:
                 params.append(f"ruas_id={ruas_id}")
-            if gerbang_id is not None:
+
+            if gerbang_id:
                 params.append(f"gerbang_id={gerbang_id}")
 
-            if params:
-                url = f"{base_url}?{'&'.join(params)}"
-            else:
-                url = base_url
+            url = f"{base_url}?{'&'.join(params)}" if params else base_url
+
+            self.logger.info(f"Request API URL: {url}")
 
             return Http.http_get(url, headers=headers)
 
         except Exception as e:
-            self.logger.error(f"Error saat request: {e}")
+            self.logger.error(f"Error saat request API: {e}")
             return None
 
-
     def _map_data(self, item):
-        mapping = {
-            "1": "1",
-            "3": "0",
-        }
-
         return {
             "ktp_id": item.get("uid"),
             "no_registrasi": item.get("no_registrasi"),
             "tgl_terbit": item.get("tgl_terbit"),
             "signature_key": item.get("signature_key"),
             "tgl_kadaluarsa": item.get("tgl_kadaluwarsa"),
-            "nama": item.get("nama_pengguna"),
-            "ruas": item.get("ruas"),
-            "penempatan_gerbang": item.get("penempatan_gerbang"),
-            "status": mapping.get(item.get("status_kartu"), "0"),
+            "nama": item.get("nama_pengguna") or "",
+            "ruas": str(item.get("ruas")),                     # pastikan string
+            "penempatan_gerbang": str(item.get("penempatan_gerbang")),  # pastikan string
+            "status": "1" if item.get("status_kartu") == "1" else "0",
             "isdeleted": "0",
             "datetimeint": item.get("datetimeint"),
         }
 
-    def _save_to_db(self, mapped_data):        
+    def _save_to_db(self, mapped_data):
         if not mapped_data:
+            self.logger.warning("mapped_data kosong, tidak ada yang disimpan.")
             return False
 
         columns = list(mapped_data[0].keys())
         col_names = ", ".join(columns)
         placeholders = ", ".join([f"%({c})s" for c in columns])
 
-        # Kolom unik / primary key jangan ikut di-update
-        # unique_keys = {"ktp_id", "no_registrasi"}
+        # Kolom yang boleh update selain UNIQUE KEY
+        update_cols = [c for c in columns if c not in self.unique_keys]
+        update_clause = ", ".join([f"{c}=VALUES({c})" for c in update_cols])
 
-        # update_cols = [c for c in columns if c not in unique_keys]
-        # update_clause = ", ".join([f"{c}=VALUES({c})" for c in update_cols])
-
-        # query = f"""
-        #     INSERT INTO tbl_penerbitan_kartu_whitelist ({col_names})
-        #     VALUES ({placeholders})
-        #     ON DUPLICATE KEY UPDATE {update_clause}
-        # """
-        
         query = f"""
             INSERT INTO tbl_penerbitan_kartu_whitelist ({col_names})
             VALUES ({placeholders})
+            ON DUPLICATE KEY UPDATE {update_clause}
         """
 
         try:
@@ -121,24 +120,26 @@ class Whitelist:
             self.db.commit()
             self.logger.info(f"{len(mapped_data)} data berhasil disimpan/diupdate ke DB.")
             return True
-        except Exception as e:
-            self.db.rollback()
-            self.logger.error(f"Gagal simpan ke DB, simpan dibatalkan: {e}")
-            return False
 
+        except Exception as e:
+            self.logger.error(f"ERROR DB: {e}")
+            self.logger.error("Query gagal! Ini biasanya terjadi jika UNIQUE KEY tidak cocok.")
+            self.db.rollback()
+            return False
 
     def _flag_data(self, ids: str):
         try:
             headers = {"x-api-key": CONFIG["xapikey"]}
             payload = {"whitelist_ids": ids}
 
-            self.logger.info("Memulai flagging data...")
+            self.logger.info(f"Flagging whitelist ID(s): {ids}")
 
             return Http.http_patch(
                 f"{CONFIG['endpoint_url']}/api/v1/distribution/data/whitelist",
                 payload=payload,
                 headers=headers,
             )
+
         except Exception as e:
-            self.logger.error(f"Error saat request flag data: {e}")
+            self.logger.error(f"Error flagging data: {e}")
             return None

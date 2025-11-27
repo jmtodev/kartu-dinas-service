@@ -9,11 +9,17 @@ class Penerbitan:
         self.db = MySQLConnector(CONFIG["mysql"])
         self.logger = setup_logger(self.__class__.__name__)
 
+
+        # Kolom UNIQUE yang benar
+        self.unique_keys = ["ktp_id", "ktp_jenis_id", "penempatan_gerbang"]
+
     def run_service(self):
         self.logger.info("Service penerbitan running...")
+
         try:
             self.db.connect()
             rows = self._fetch_from_api()
+
             if not rows or "data" not in rows or "data" not in rows["data"]:
                 self.logger.info("Tidak ada data valid dari API.")
                 return
@@ -24,14 +30,20 @@ class Penerbitan:
                 self.logger.info("Tidak ada data untuk diproses.")
                 return
 
-            self.logger.info(f"Ditemukan {len(data)} data.")
+            self.logger.info(f"Ditemukan {len(data)} data dari API.")
 
             mapped_data = [self._map_data(item) for item in data]
 
+            # Debug untuk memastikan tidak salah row
+            for d in mapped_data:
+                self.logger.debug(
+                    f"UNIQUE CHECK → ktp_id={d['ktp_id']} | ruas={d['ruas']} | penempatan={d['penempatan_gerbang']}"
+                )
+
             if self._save_to_db(mapped_data):
                 ids = [str(item.get("id")) for item in data if item.get("id")]
-                ids_str = ",".join(ids)
-                self._flag_data(ids_str)
+                if ids:
+                    self._flag_data(",".join(ids))
 
         except Exception as e:
             self.logger.error(f"Terjadi error saat menjalankan service: {e}")
@@ -68,30 +80,22 @@ class Penerbitan:
             "datetimeint": item.get("datetimeint"),
         }
 
-    def _save_to_db(self, mapped_data):        
+    def _save_to_db(self, mapped_data):
         if not mapped_data:
+            self.logger.warning("mapped_data kosong, tidak ada yang disimpan.")
             return False
 
         columns = list(mapped_data[0].keys())
         col_names = ", ".join(columns)
         placeholders = ", ".join([f"%({c})s" for c in columns])
 
-        # Tentukan kolom yang TIDAK boleh diupdate (primary key / unique key)
-        # unique_keys = {"ktp_id", "no_registrasi", "ktp_jenis_id"}
+        update_cols = [c for c in columns if c not in self.unique_keys]
+        update_clause = ", ".join([f"{c}=VALUES({c})" for c in update_cols])
 
-        # Bangun update clause hanya untuk kolom non-key
-        # update_cols = [c for c in columns if c not in unique_keys]
-        # update_clause = ", ".join([f"{c}=VALUES({c})" for c in update_cols])
-
-        # query = f"""
-        #     INSERT INTO tbl_penerbitan_kartu ({col_names})
-        #     VALUES ({placeholders})
-        #     ON DUPLICATE KEY UPDATE {update_clause}
-        # """
-        
         query = f"""
             INSERT INTO tbl_penerbitan_kartu ({col_names})
             VALUES ({placeholders})
+            ON DUPLICATE KEY UPDATE {update_clause}
         """
 
         try:
@@ -99,19 +103,19 @@ class Penerbitan:
             self.db.commit()
             self.logger.info(f"{len(mapped_data)} data berhasil disimpan/diupdate ke DB.")
             return True
+
         except Exception as e:
+            self.logger.error(f"ERROR DB: {e}")
+            self.logger.error("Query gagal! Ini biasanya terjadi jika UNIQUE KEY tidak cocok.")
             self.db.rollback()
-            self.logger.error(f"Gagal simpan ke DB, simpan dibatalkan: {e}")
             return False
-
-
 
     def _flag_data(self, ids: str):
         try:
             headers = {"x-api-key": CONFIG["xapikey"]}
             payload = {"penerbitan_ids": ids}
 
-            self.logger.info("Memulai flagging data...")
+            self.logger.info(f"Flagging whitelist ID(s): {ids}")
 
             return Http.http_patch(
                 f"{CONFIG['endpoint_url']}/api/v1/distribution/data/penerbitan",
@@ -119,5 +123,5 @@ class Penerbitan:
                 headers=headers,
             )
         except Exception as e:
-            self.logger.error(f"Error saat request flag data: {e}")
+            self.logger.error(f"Error flagging data: {e}")
             return None
