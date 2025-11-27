@@ -72,6 +72,11 @@ class Whitelist:
 
 
     def _map_data(self, item):
+        mapping = {
+            "1": "1",
+            "3": "0",
+        }
+
         return {
             "ktp_id": item.get("uid"),
             "no_registrasi": item.get("no_registrasi"),
@@ -81,7 +86,7 @@ class Whitelist:
             "nama": item.get("nama_pengguna"),
             "ruas": item.get("ruas"),
             "penempatan_gerbang": item.get("penempatan_gerbang"),
-            "status": "1" if item.get("status_kartu") == "1" else "0",
+            "status": mapping.get(item.get("status_kartu"), "0"),
             "isdeleted": "0",
             "datetimeint": item.get("datetimeint"),
         }
