@@ -74,7 +74,7 @@ class Penerbitan:
             "tgl_kadaluarsa": item.get("tgl_kadaluwarsa"),
             "nama": item.get("nama_pengguna"),
             "ruas": item.get("ruas"),
-            "penempatan_gerbang": item.get("penempatan_gerbang"),
+            "penempatan_gerbang": None,
             "status": item.get("status_kartu"),
             "isdeleted": "0",
             "datetimeint": item.get("datetimeint"),
