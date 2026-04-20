@@ -40,11 +40,6 @@ class Blacklist:
 
             mapped_data = [self._map_data(item) for item in data]
 
-            if self._save_to_db(mapped_data):
-                ids = [str(item.get("id")) for item in data if item.get("id")]
-                if ids:
-                    self._flag_data(",".join(ids))
-
         except Exception as e:
             self.logger.error(f"Terjadi error saat menjalankan service: {e}")
 
@@ -105,19 +100,3 @@ class Blacklist:
             self.logger.error(f"Query gagal: {e}")
             self.logger.warning("Query gagal, tetapi tidak dilakukan rollback.")
             return False
-
-    def _flag_data(self, ids: str):
-        try:
-            headers = {"x-api-key": CONFIG["xapikey"]}
-            payload = {"blacklist_ids": ids}
-
-            self.logger.info(f"Flagging blacklist ID(s): {ids}")
-
-            return Http.http_patch(
-                f"{CONFIG['endpoint_url']}/api/v1/distribution/data/blacklist",
-                payload=payload,
-                headers=headers,
-            )
-        except Exception as e:
-            self.logger.error(f"Error flagging data: {e}")
-            return None

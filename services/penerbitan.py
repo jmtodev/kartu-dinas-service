@@ -40,11 +40,6 @@ class Penerbitan:
                     f"UNIQUE CHECK → ktp_id={d['ktp_id']} | ruas={d['ruas']} | penempatan={d['penempatan_gerbang']}"
                 )
 
-            if self._save_to_db(mapped_data):
-                ids = [str(item.get("id")) for item in data if item.get("id")]
-                if ids:
-                    self._flag_data(",".join(ids))
-
         except Exception as e:
             self.logger.error(f"Terjadi error saat menjalankan service: {e}")
         finally:
@@ -110,19 +105,3 @@ class Penerbitan:
             self.logger.error("Query gagal! Ini biasanya terjadi jika UNIQUE KEY tidak cocok.")
             self.db.rollback()
             return False
-
-    def _flag_data(self, ids: str):
-        try:
-            headers = {"x-api-key": CONFIG["xapikey"]}
-            payload = {"penerbitan_ids": ids}
-
-            self.logger.info(f"Flagging whitelist ID(s): {ids}")
-
-            return Http.http_patch(
-                f"{CONFIG['endpoint_url']}/api/v1/distribution/data/penerbitan",
-                payload=payload,
-                headers=headers,
-            )
-        except Exception as e:
-            self.logger.error(f"Error flagging data: {e}")
-            return None
