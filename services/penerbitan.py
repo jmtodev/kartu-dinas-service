@@ -66,6 +66,7 @@ class Penerbitan:
 
     def _map_data(self, item):
         return {
+            "ktp_sn": item.get("no_kartu"),
             "ktp_id": item.get("uid"),
             "no_registrasi": item.get("no_registrasi"),
             "ktp_jenis_id": item.get("jenis_kartu", {}).get("id"),
