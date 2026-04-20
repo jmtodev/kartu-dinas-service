@@ -40,6 +40,9 @@ class Blacklist:
 
             mapped_data = [self._map_data(item) for item in data]
 
+            # insert data 
+            self._save_to_db(mapped_data)
+
         except Exception as e:
             self.logger.error(f"Terjadi error saat menjalankan service: {e}")
 

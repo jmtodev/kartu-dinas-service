@@ -43,6 +43,9 @@ class Whitelist:
                 self.logger.debug(
                     f"UNIQUE CHECK → ktp_id={d['ktp_id']} | ruas={d['ruas']} | penempatan={d['penempatan_gerbang']}"
                 )
+            
+            #inser db
+            self._save_to_db(mapped_data)
 
         except Exception as e:
             self.logger.error(f"Terjadi error saat menjalankan service: {e}")
