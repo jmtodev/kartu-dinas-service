@@ -34,6 +34,14 @@ class Whitelist:
                 self.logger.info("Tidak ada data untuk diproses.")
                 return
 
+            if ruas_id:
+                data = [item for item in data if str(item.get("ruas")) == str(ruas_id)]
+                self.logger.info(f"Filter ruas={ruas_id}: {len(data)} data cocok.")
+
+            if gerbang_id:
+                data = [item for item in data if str(item.get("penempatan_gerbang")) == str(gerbang_id)]
+                self.logger.info(f"Filter penempatan_gerbang={gerbang_id}: {len(data)} data cocok.")
+
             self.logger.info(f"Ditemukan {len(data)} data dari API.")
 
             mapped_data = [self._map_data(item) for item in data]
