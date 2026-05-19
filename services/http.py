@@ -65,3 +65,42 @@ class Http:
         except requests.RequestException as e:
             logger.error(f"PATCH {url} | Request failed: {e}")
             return None
+
+    @staticmethod
+    def http_post(url: str, json: dict = None, timeout: int = 10, headers: dict = None):
+        try:
+            default_headers = {
+                "Content-Type": "application/json",
+                "User-Agent": "Mozilla/5.0"
+            }
+
+            if headers:
+                default_headers.update(headers)
+
+            response = requests.post(
+                url,
+                json=json,
+                headers=default_headers,
+                timeout=timeout
+            )
+
+            logger.info(f"POST {url} | Response Status: {response.status_code}")
+
+            try:
+                result = response.json()
+            except ValueError:
+                result = response.text
+
+            # inject status code ke response
+            if isinstance(result, dict):
+                result["status_code"] = response.status_code
+
+            return result
+
+        except requests.exceptions.Timeout:
+            logger.error(f"POST {url} | Request timed out")
+            return None
+
+        except requests.RequestException as e:
+            logger.error(f"POST {url} | Request failed: {e}")
+            return None

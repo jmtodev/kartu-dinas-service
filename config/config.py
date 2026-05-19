@@ -4,7 +4,8 @@ CONFIG = {
     "service": os.getenv("SERVICE"),
     "endpoint_url": os.getenv("ENDPOINT_URL", "").rstrip("/"),
     "schedule_interval": int(os.getenv("SCHEDULE_INTERVAL", 5)),
-    "xapikey": os.getenv("XAPIKEY", None),
+    "username" : os.getenv("USERNAME"),
+    "password" : os.getenv("PASSWORD"),
     "mysql": {
         "host": os.getenv("DB_HOST", "localhost"),
         "user": os.getenv("DB_USERNAME", "root"),   # default mysql user

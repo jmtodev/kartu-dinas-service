@@ -5,12 +5,12 @@ from config.config import CONFIG
 
 
 class Penerbitan:
+    api_token = None
+
     def __init__(self):
         self.db = MySQLConnector(CONFIG["mysql"])
         self.logger = setup_logger(self.__class__.__name__)
 
-
-        # Kolom UNIQUE yang benar
         self.unique_keys = ["ktp_id", "ktp_jenis_id", "penempatan_gerbang"]
 
     def run_service(self):
@@ -34,34 +34,123 @@ class Penerbitan:
 
             mapped_data = [self._map_data(item) for item in data]
 
-            # Debug untuk memastikan tidak salah row
             for d in mapped_data:
                 self.logger.debug(
-                    f"UNIQUE CHECK → ktp_id={d['ktp_id']} | ruas={d['ruas']} | penempatan={d['penempatan_gerbang']}"
+                    f"UNIQUE CHECK -> ktp_id={d['ktp_id']} | ruas={d['ruas']} | "
+                    f"penempatan={d['penempatan_gerbang']}"
                 )
 
-            # insert data
             self._save_to_db(mapped_data)
-
 
         except Exception as e:
             self.logger.error(f"Terjadi error saat menjalankan service: {e}")
+
         finally:
             try:
                 self.db.close()
             except Exception as e:
                 self.logger.warning(f"Gagal menutup koneksi: {e}")
 
+    def _request_api_token(self):
+        try:
+            url = f"{CONFIG['endpoint_url']}/api/v1/auth/client/requestToken"
+
+            body = {
+                "nama": CONFIG["username"],
+                "password": CONFIG["password"],
+            }
+
+            self.logger.info("Request token API...")
+
+            response = Http.http_post(url, json=body)
+
+            if not response or response.get("success") is not True:
+                self.logger.error(f"Gagal request token: {response}")
+                return None
+
+            token = response.get("data", {}).get("client", {}).get("token")
+
+            if not token:
+                self.logger.error(f"Token tidak ditemukan di response: {response}")
+                return None
+
+            Penerbitan.api_token = token
+            self.logger.info("Token API berhasil didapatkan.")
+            return token
+
+        except Exception as e:
+            self.logger.error(f"Error saat request token API: {e}")
+            return None
+
     def _fetch_from_api(self):
         try:
-            headers = {"x-api-key": CONFIG["xapikey"]}
-            return Http.http_get(
-                f"{CONFIG['endpoint_url']}/api/v1/distribution/data/penerbitan",
-                headers=headers,
-            )
+            if not Penerbitan.api_token:
+                self.logger.info("Token belum ada, request token baru...")
+
+                token = self._request_api_token()
+
+                if not token:
+                    self.logger.error("Tidak bisa request API karena token kosong.")
+                    return None
+            else:
+                self.logger.info("Token sudah ada, langsung fetch data.")
+
+            response = self._fetch_penerbitan()
+
+            if self._is_unauthorized(response):
+                self.logger.warning(
+                    "Token unauthorized/expired. Request token baru lalu retry fetch data..."
+                )
+
+                Penerbitan.api_token = None
+
+                token = self._request_api_token()
+
+                if not token:
+                    self.logger.error("Gagal request token baru.")
+                    return None
+
+                response = self._fetch_penerbitan()
+
+            return response
+
         except Exception as e:
             self.logger.error(f"Error saat request: {e}")
             return None
+
+    def _fetch_penerbitan(self):
+        headers = {
+            "Authorization": f"Bearer {Penerbitan.api_token}"
+        }
+
+        url = f"{CONFIG['endpoint_url']}/api/v1/distribution/data/penerbitan"
+
+        self.logger.info(f"Request API URL: {url}")
+
+        return Http.http_get(url, headers=headers)
+
+    def _is_unauthorized(self, response):
+        if not response:
+            return False
+
+        if not isinstance(response, dict):
+            return False
+
+        status_code = response.get("status_code") or response.get("code")
+        message = str(response.get("message", "")).lower()
+        error = str(response.get("error", "")).lower()
+
+        return (
+            status_code == 401
+            or message == "unauthorized"
+            or "unauthorized" in message
+            or "unauthorised" in message
+            or "expired" in message
+            or "kadaluarsa" in message
+            or "kadaluwarsa" in message
+            or "unauthorized" in error
+            or "expired" in error
+        )
 
     def _map_data(self, item):
         return {

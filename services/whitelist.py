@@ -6,11 +6,12 @@ from config.config import CONFIG
 
 
 class Whitelist:
+    api_token = None
+
     def __init__(self):
         self.db = MySQLConnector(CONFIG["mysql"])
         self.logger = setup_logger(self.__class__.__name__)
-        
-        # Kolom yang menjadi UNIQUE KEY di DB
+
         self.unique_keys = ["ktp_id", "ruas", "penempatan_gerbang"]
 
     def run_service(self):
@@ -39,20 +40,24 @@ class Whitelist:
                 self.logger.info(f"Filter ruas={ruas_id}: {len(data)} data cocok.")
 
             if gerbang_id:
-                data = [item for item in data if str(item.get("penempatan_gerbang")) == str(gerbang_id)]
-                self.logger.info(f"Filter penempatan_gerbang={gerbang_id}: {len(data)} data cocok.")
+                data = [
+                    item for item in data
+                    if str(item.get("penempatan_gerbang")) == str(gerbang_id)
+                ]
+                self.logger.info(
+                    f"Filter penempatan_gerbang={gerbang_id}: {len(data)} data cocok."
+                )
 
             self.logger.info(f"Ditemukan {len(data)} data dari API.")
 
             mapped_data = [self._map_data(item) for item in data]
 
-            # Debug UNIQUE KEY
             for d in mapped_data:
                 self.logger.debug(
-                    f"UNIQUE CHECK → ktp_id={d['ktp_id']} | ruas={d['ruas']} | penempatan={d['penempatan_gerbang']}"
+                    f"UNIQUE CHECK -> ktp_id={d['ktp_id']} | ruas={d['ruas']} | "
+                    f"penempatan={d['penempatan_gerbang']}"
                 )
-            
-            #inser db
+
             self._save_to_db(mapped_data)
 
         except Exception as e:
@@ -64,28 +69,113 @@ class Whitelist:
             except Exception as e:
                 self.logger.warning(f"Gagal menutup koneksi: {e}")
 
+    def _request_api_token(self):
+        try:
+            url = f"{CONFIG['endpoint_url']}/api/v1/auth/client/requestToken"
+
+            body = {
+                "nama": CONFIG["username"],
+                "password": CONFIG["password"],
+            }
+
+            self.logger.info("Request token API...")
+
+            response = Http.http_post(url, json=body)
+
+            if not response or response.get("success") is not True:
+                self.logger.error(f"Gagal request token: {response}")
+                return None
+
+            token = response.get("data", {}).get("client", {}).get("token")
+
+            if not token:
+                self.logger.error(f"Token tidak ditemukan di response: {response}")
+                return None
+
+            Whitelist.api_token = token
+            self.logger.info("Token API berhasil didapatkan.")
+            return token
+
+        except Exception as e:
+            self.logger.error(f"Error saat request token API: {e}")
+            return None
+
     def _fetch_from_api(self, ruas_id=None, gerbang_id=None):
         try:
-            headers = {"x-api-key": CONFIG["xapikey"]}
+            if not Whitelist.api_token:
+                self.logger.info("Token belum ada, request token baru...")
 
-            base_url = f"{CONFIG['endpoint_url']}/api/v1/distribution/data/whitelist"
-            params = []
+                token = self._request_api_token()
 
-            if ruas_id:
-                params.append(f"ruas_id={ruas_id}")
+                if not token:
+                    self.logger.error("Tidak bisa request API karena token kosong.")
+                    return None
+            else:
+                self.logger.info("Token sudah ada, langsung fetch data.")
 
-            if gerbang_id:
-                params.append(f"gerbang_id={gerbang_id}")
+            response = self._fetch_whitelist(ruas_id, gerbang_id)
 
-            url = f"{base_url}?{'&'.join(params)}" if params else base_url
+            if self._is_unauthorized(response):
+                self.logger.warning("Token unauthorized/expired. Request token baru lalu retry fetch data...")
 
-            self.logger.info(f"Request API URL: {url}")
+                Whitelist.api_token = None
 
-            return Http.http_get(url, headers=headers)
+                token = self._request_api_token()
+
+                if not token:
+                    self.logger.error("Gagal request token baru.")
+                    return None
+
+                response = self._fetch_whitelist(ruas_id, gerbang_id)
+
+            return response
 
         except Exception as e:
             self.logger.error(f"Error saat request API: {e}")
             return None
+
+    def _fetch_whitelist(self, ruas_id=None, gerbang_id=None):
+        headers = {
+            "Authorization": f"Bearer {Whitelist.api_token}"
+        }
+
+        base_url = f"{CONFIG['endpoint_url']}/api/v1/distribution/data/whitelist"
+        params = []
+
+        if ruas_id:
+            params.append(f"ruas_id={ruas_id}")
+
+        if gerbang_id:
+            params.append(f"gerbang_id={gerbang_id}")
+
+        url = f"{base_url}?{'&'.join(params)}" if params else base_url
+
+        self.logger.info(f"Request API URL: {url}")
+
+        return Http.http_get(url, headers=headers)
+
+    def _is_unauthorized(self, response):
+        if not response:
+            return False
+
+        if not isinstance(response, dict):
+            return False
+
+        status_code = response.get("status_code") or response.get("code")
+        message = str(response.get("message", "")).lower()
+        error = str(response.get("error", "")).lower()
+
+        return (
+            status_code == 401
+            or message == "unauthorized"
+            or "unauthorized" in message
+            or "unauthorised" in message
+            or "expired" in message
+            or "kadaluarsa" in message
+            or "kadaluwarsa" in message
+            or "unauthorized" in error
+            or "expired" in error
+        )
 
     def _map_data(self, item):
         return {
@@ -95,8 +185,8 @@ class Whitelist:
             "signature_key": item.get("signature_key"),
             "tgl_kadaluarsa": item.get("tgl_kadaluwarsa"),
             "nama": item.get("nama_pengguna") or "",
-            "ruas": str(item.get("ruas")),                     # pastikan string
-            "penempatan_gerbang": str(item.get("penempatan_gerbang")),  # pastikan string
+            "ruas": str(item.get("ruas")),
+            "penempatan_gerbang": str(item.get("penempatan_gerbang")),
             "status": "1" if item.get("status_kartu") == "1" else "0",
             "isdeleted": "0",
             "datetimeint": item.get("datetimeint"),
@@ -111,7 +201,6 @@ class Whitelist:
         col_names = ", ".join(columns)
         placeholders = ", ".join([f"%({c})s" for c in columns])
 
-        # Kolom yang boleh update selain UNIQUE KEY
         update_cols = [c for c in columns if c not in self.unique_keys]
         update_clause = ", ".join([f"{c}=VALUES({c})" for c in update_cols])
 
